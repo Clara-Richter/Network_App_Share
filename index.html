@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Analysis</title>
+    <style>
+        body {
+            font-size: 18px;
+            font-family: system-ui;
+            margin: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            min-height: 800px;
+        }
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        .options {
+            width: 300px;
+            height: 100%;
+            border: 1px solid #000;
+            background-color: rgba(200, 125, 230, 0.676);
+            padding: 10px;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+        .divider {
+            width: 5px;
+            background-color: #ccc;
+            cursor: ew-resize;
+            height: 100%;
+        }
+        .divider:hover {
+            background-color: #999;
+        }
+        .vertical-divider {
+            height: 5px;
+            background-color: #ccc;
+            cursor: ns-resize;
+            width: 100%;
+        }
+        .vertical-divider:hover {
+            background-color: #999;
+        }
+        .graph_container {
+            flex: 1;
+            height: 100%;
+            border: 1px solid #000;
+            background-color: #fff;
+            display: flex;
+            box-sizing: border-box;
+        }
+        .graph_container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+        #graphContainer {
+            flex: 3;
+            height: 100%;
+        }
+        #sidePanel {
+            flex: 1;
+            height: 100%;
+            border-left: 1px solid #000;
+            padding: 10px;
+            overflow-y: auto;
+            background-color: #f0f0f0;
+            display: none;
+        }
+        #sidePanel h3 {
+            margin-top: 0;
+        }
+        .filter-buttons button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+            cursor: pointer;
+        }
+        .filter-buttons button.active {
+            font-weight: bold;
+            background-color: rgba(255, 255, 0, 0.5);
+        }
+        #loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .placeholder {
+            flex: 1;
+            width: 100%;
+        }
+        /* New divider for side panel */
+        .side-panel-divider {
+            width: 5px;
+            background-color: #ccc;
+            cursor: ew-resize;
+            height: 100%;
+        }
+        .side-panel-divider:hover {
+            background-color: #999;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css">
+</head>
+<body>
+    <h1>Network Analysis</h1>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
+    <div class="main-container" id="mainContainer">
+        <div class="container" id="container">
+            <div class="options">
+                <h2>FILTERS:</h2>
+                <div class="filter-buttons">
+                    <button onclick="generateGraph('Company')">Company</button>
+                    <button onclick="generateGraph('Country')">Country</button>
+                    <button onclick="generateGraph('Programs')">Programs</button>
+                    <button onclick="generateGraph('Combatant Commands')">Combatant Commands</button>
+                    <button onclick="generateGraph('Support Infrastructures')">Support Infrastructures</button>
+                    <button onclick="generateGraph('Raw Materials')">Raw Materials</button>
+                    <button onclick="generateGraph('Terms of Interest')">Terms of Interest</button>
+                </div>
+                <br>
+                <label for="fileSelect"><b>Upload Excel File:</b></label>
+                <input id="fileSelect" type="file" accept=".xlsx, .xls" />
+                <br><br>
+                <form id="uploadForm" enctype="multipart-form-data">
+                    <label for="search_term">Search for term(s):</label>
+                    <input type="text" id="search_term" name="search_term"><br>
+                    <button type="button" onclick="submitForm()">Search</button>
+                </form>
+            </div>
+            <div class="divider" id="divider"></div>
+            <div class="graph_container">
+                <div id="loading">Loading...</div>
+                <div id="graphContainer"></div>
+                <div class="side-panel-divider" id="sidePanelDivider"></div>
+                <div id="sidePanel">
+                    <h3 id="sidePanelHeading">Article Sentences</h3>
+                    <p id="articleSentences">Click an article node to view its sentences.</p>
+                </div>
+            </div>
+        </div>
+        <div class="vertical-divider" id="verticalDivider"></div>
+    </div>
+    <div class="placeholder"></div>
+
+    <script>
+        function generateGraph(sheetName) {
+            const fileInput = document.getElementById('fileSelect');
+            if (!fileInput.files.length) {
+                alert('Please select an Excel file');
+                return;
+            }
+            // Remove active class from all buttons
+            const buttons = document.querySelectorAll('.filter-buttons button');
+            buttons.forEach(button => button.classList.remove('active'));
+            // Add active class to the clicked button
+            const clickedButton = document.querySelector(`.filter-buttons button[onclick="generateGraph('${sheetName}')"]`);
+            clickedButton.classList.add('active');
+            // Reset side panel when generating a new graph
+            const sidePanel = document.getElementById('sidePanel');
+            const sidePanelHeading = document.getElementById('sidePanelHeading');
+            const articleSentences = document.getElementById('articleSentences');
+            sidePanel.style.display = 'none';
+            sidePanelHeading.textContent = 'Article Sentences'; // Reset heading
+            articleSentences.textContent = 'Click an article node to view its sentences.';
+            submitForm(sheetName);
+        }
+
+        function submitForm(sheetName) {
+            const fileInput = document.getElementById('fileSelect');
+            if (!fileInput.files.length) {
+                alert('Please select an Excel file');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const searchTerm = document.getElementById('search_term').value;
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // If sheetName is not provided (e.g., called from search), use the active filter
+            let activeSheetName = sheetName;
+            if (!activeSheetName) {
+                const activeButton = document.querySelector('.filter-buttons button.active');
+                if (activeButton) {
+                    // Extract the sheet name from the onclick attribute
+                    const onclickText = activeButton.getAttribute('onclick');
+                    const match = onclickText.match(/'([^']+)'/);
+                    activeSheetName = match ? match[1] : 'Program';
+                } else {
+                    activeSheetName = 'Program';
+                }
+            }
+            formData.append('sheet_name', activeSheetName);
+            formData.append('search_term', searchTerm);
+
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "/generate-graph", true);
+            
+            const loading = document.getElementById('loading');
+            const graphContainer = document.getElementById('graphContainer');
+            loading.style.display = 'block';
+            graphContainer.innerHTML = '';
+
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    loading.style.display = 'none';
+                    if (xhr.status === 200) {
+                        const iframe = document.createElement('iframe');
+                        iframe.srcdoc = xhr.responseText;
+                        iframe.style.width = '100%';
+                        iframe.style.height = '100%';
+                        iframe.style.border = 'none';
+                        graphContainer.innerHTML = '';
+                        graphContainer.appendChild(iframe);
+                    } else {
+                        let errorMessage = 'Failed to generate graph';
+                        try {
+                            const error = JSON.parse(xhr.responseText);
+                            errorMessage = error.error || errorMessage;
+                        } catch (e) {
+                            // Non-JSON response
+                        }
+                        alert('Error: ' + errorMessage);
+                    }
+                }
+            };
+            xhr.send(formData);
+        }
+
+        // Listen for messages from the iframe to update the side panel
+        window.addEventListener('message', function(event) {
+            console.log('Message received in parent:', event.data);
+            if (event.data.type === 'showArticleSentences') {
+                const sidePanel = document.getElementById('sidePanel');
+                const sidePanelHeading = document.getElementById('sidePanelHeading');
+                const articleSentences = document.getElementById('articleSentences');
+                sidePanel.style.display = 'block';
+                // Update the heading with article label and entity name
+                const articleLabel = event.data.articleLabel || 'Unknown Article';
+                const entityName = event.data.entityName || 'Unknown Entity';
+                sidePanelHeading.textContent = `${articleLabel} - ${entityName}`;
+                articleSentences.textContent = event.data.sentences || 'No sentences available.';
+            }
+        });
+
+        // Handle horizontal resizing for options panel
+        const divider = document.getElementById('divider');
+        const options = document.querySelector('.options');
+        const graphContainerOuter = document.querySelector('.graph_container');
+        let isDraggingHorizontal = false;
+
+        divider.addEventListener('mousedown', function(e) {
+            isDraggingHorizontal = true;
+            document.body.style.cursor = 'ew-resize';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (isDraggingHorizontal) {
+                const containerRect = document.querySelector('.container').getBoundingClientRect();
+                const newOptionsWidth = e.clientX - containerRect.left;
+                const minOptionsWidth = 200;
+                const maxOptionsWidth = containerRect.width - 300;
+
+                if (newOptionsWidth >= minOptionsWidth && newOptionsWidth <= maxOptionsWidth) {
+                    options.style.width = newOptionsWidth + 'px';
+                    graphContainerOuter.style.width = (containerRect.width - newOptionsWidth - divider.offsetWidth) + 'px';
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            isDraggingHorizontal = false;
+            document.body.style.cursor = 'default';
+        });
+
+        // Handle horizontal resizing for side panel
+        const sidePanelDivider = document.getElementById('sidePanelDivider');
+        const graphContainer = document.getElementById('graphContainer');
+        const sidePanel = document.getElementById('sidePanel');
+        let isDraggingSidePanel = false;
+
+        sidePanelDivider.addEventListener('mousedown', function(e) {
+            isDraggingSidePanel = true;
+            document.body.style.cursor = 'ew-resize';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (isDraggingSidePanel) {
+                const graphContainerRect = graphContainerOuter.getBoundingClientRect();
+                const newGraphWidth = e.clientX - graphContainerRect.left;
+                const minGraphWidth = 300; // Minimum width for the graph
+                const minSidePanelWidth = 200; // Minimum width for the side panel
+                const maxGraphWidth = graphContainerRect.width - minSidePanelWidth - sidePanelDivider.offsetWidth;
+
+                if (newGraphWidth >= minGraphWidth && newGraphWidth <= maxGraphWidth) {
+                    graphContainer.style.width = newGraphWidth + 'px';
+                    sidePanel.style.width = (graphContainerRect.width - newGraphWidth - sidePanelDivider.offsetWidth) + 'px';
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            isDraggingSidePanel = false;
+            document.body.style.cursor = 'default';
+        });
+
+        // Handle vertical resizing
+        const verticalDivider = document.getElementById('verticalDivider');
+        const mainContainer = document.getElementById('mainContainer');
+        const container = document.getElementById('container');
+        let isDraggingVertical = false;
+
+        verticalDivider.addEventListener('mousedown', function(e) {
+            isDraggingVertical = true;
+            document.body.style.cursor = 'ns-resize';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (isDraggingVertical) {
+                const mainContainerRect = mainContainer.getBoundingClientRect();
+                const newHeight = e.clientY - mainContainerRect.top;
+                const minHeight = 300;
+                const maxHeight = window.innerHeight - 150;
+
+                if (newHeight >= minHeight && newHeight <= maxHeight) {
+                    mainContainer.style.minHeight = newHeight + 'px';
+                    container.style.height = newHeight + 'px';
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            isDraggingVertical = false;
+            document.body.style.cursor = 'default';
+        });
+    </script>
+</body>
+</html>
